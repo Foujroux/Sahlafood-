@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --souk-primary: #059669;
+  --souk-primary-dark: #047857;
+  --souk-accent: #f59e0b;
+  --souk-bg: #f8fafc;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #059669;
+  outline-offset: 2px;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
+
+[dir="rtl"] body,
+[dir="rtl"] {
+  font-family:
+    "Segoe UI",
+    "Noto Naskh Arabic",
+    "Cairo",
+    "Amiri",
+    system-ui,
+    sans-serif;
+}
+
+@font-face {
+  font-family: "SoukArabic";
+  src: local("Cairo"), local("Noto Naskh Arabic");
+  font-display: swap;
+}
+
+.rtl-flip {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .mirror-rtl {
+  transform: scaleX(-1);
+}
+
+[id="length"] {
+  display: none;
+}
+
+.text-primary-gradient {
+  background: linear-gradient(135deg, #059669 0%, #0d9488 50%, #f59e0b 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
