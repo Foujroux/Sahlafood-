@@ -64,6 +64,12 @@ export default function Home({
   return (
     <main className="mx-auto max-w-4xl p-4">
       <h1 className="text-2xl font-bold">{t.tagline}</h1>
+      <img
+        src="/1791131299258.jpg"
+        alt=""
+        style={{ width: "100%", display: "block" }}
+        className="mt-4 rounded-xl"
+      />
 
       <div className="mt-3 flex gap-2">
         {(
