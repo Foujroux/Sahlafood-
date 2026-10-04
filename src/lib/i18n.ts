@@ -35,6 +35,10 @@ export const dict = {
     role: "Je suis",
     client: "Client",
     driver: "Livreur",
+    restaurateur: "Restaurateur",
+    fastfood: "Fast food",
+    pizza: "Pizzeria",
+    grocery: "Épicerie",
     vehicleType: "Type de véhicule",
     motorbike: "Moto",
     car: "Voiture",
@@ -92,6 +96,10 @@ export const dict = {
     role: "أنا",
     client: "زبون",
     driver: "سائق توصيل",
+    restaurateur: "صاحب مطعم",
+    fastfood: "وجبات سريعة",
+    pizza: "بيتزا",
+    grocery: "بقالة",
     vehicleType: "نوع المركبة",
     motorbike: "دراجة نارية",
     car: "سيارة",
@@ -124,4 +132,12 @@ export const dict = {
 export type T = keyof typeof dict.fr;
 export function t(lang: Lang, key: T): string {
   return dict[lang][key];
+}
+
+export const ROLES = ["client", "driver", "restaurateur", "fastfood", "pizza", "grocery"] as const;
+export type Role = (typeof ROLES)[number];
+export function roleLabel(lang: Lang, role: string): string {
+  return (ROLES as readonly string[]).includes(role)
+    ? dict[lang][role as Role]
+    : dict[lang].client;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { dict, type Lang } from "@/lib/i18n";
+import { dict, roleLabel, ROLES, type Lang } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { use, useEffect } from "react";
 
@@ -86,12 +86,9 @@ export default function AuthPage({
             <label className="text-sm">
               {t.role}:{" "}
               <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded border p-1">
-                <option value="client">{t.client}</option>
-                <option value="driver">{t.driver}</option>
-                <option value="restaurateur">{lang === "fr" ? "Restaurateur" : "صاحب مطعم"}</option>
-                <option value="fastfood">{lang === "fr" ? "Fast food" : "وجبات سريعة"}</option>
-                <option value="pizza">{lang === "fr" ? "Pizzeria" : "بيتزا"}</option>
-                <option value="grocery">{lang === "fr" ? "Épicerie" : "بقالة"}</option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{roleLabel(lang, r)}</option>
+                ))}
               </select>
             </label>
           </>

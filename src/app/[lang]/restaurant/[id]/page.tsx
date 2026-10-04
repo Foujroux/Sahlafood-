@@ -125,7 +125,7 @@ export default function RestaurantPage({
         ))}
       </ul>
 
-      {user && (
+      {user && shop.owner_id === user.id && (
         <section className="mt-6 rounded-xl border bg-white p-4">
           <h2 className="font-semibold">
             {lang === "fr" ? "📸 Publicité & photos du menu" : "📸 إعلانات وصور القائمة"}

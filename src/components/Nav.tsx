@@ -11,7 +11,8 @@ export default function Nav({ lang }: { lang: Lang }) {
   return (
     <header className="bg-amber-600 text-white">
       <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 p-3">
-        <Link href={`/${lang}`} className="text-lg font-bold sm:text-xl">
+        <Link href={`/${lang}`} className="flex items-center gap-2 text-lg font-bold sm:text-xl">
+          <img src="/logo.svg" alt="SahlaFood Logo" style={{ width: 32, height: 32, borderRadius: 8 }} />
           {t.appName}
         </Link>
         <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm">
