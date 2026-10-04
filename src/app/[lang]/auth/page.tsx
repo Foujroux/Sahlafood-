@@ -17,7 +17,7 @@ export default function AuthPage({
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"client" | "driver">("client");
+  const [role, setRole] = useState("client");
   const [msg, setMsg] = useState("");
   const [user, setUser] = useState<any>(null);
 
@@ -85,9 +85,13 @@ export default function AuthPage({
             <input className={inp} placeholder={t.phone} value={phone} onChange={(e) => setPhone(e.target.value)} />
             <label className="text-sm">
               {t.role}:{" "}
-              <select value={role} onChange={(e) => setRole(e.target.value as any)} className="rounded border p-1">
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded border p-1">
                 <option value="client">{t.client}</option>
                 <option value="driver">{t.driver}</option>
+                <option value="restaurateur">{lang === "fr" ? "Restaurateur" : "صاحب مطعم"}</option>
+                <option value="fastfood">{lang === "fr" ? "Fast food" : "وجبات سريعة"}</option>
+                <option value="pizza">{lang === "fr" ? "Pizzeria" : "بيتزا"}</option>
+                <option value="grocery">{lang === "fr" ? "Épicerie" : "بقالة"}</option>
               </select>
             </label>
           </>

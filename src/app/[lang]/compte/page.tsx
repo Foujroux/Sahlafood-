@@ -66,7 +66,18 @@ export default function ComptePage({
         {f("commune", t.commune)}
         {f("address", t.address)}
         <label className="text-sm">
-          {t.role}: {p.role === "driver" ? t.driver : t.client}
+          {t.role}:{" "}
+          {p.role === "driver"
+            ? t.driver
+            : p.role === "restaurateur"
+              ? lang === "fr" ? "Restaurateur" : "صاحب مطعم"
+              : p.role === "fastfood"
+                ? "Fast food"
+                : p.role === "pizza"
+                  ? lang === "fr" ? "Pizzeria" : "بيتزا"
+                  : p.role === "grocery"
+                    ? lang === "fr" ? "Épicerie" : "بقالة"
+                    : t.client}
         </label>
         <h2 className="mt-3 font-semibold">{t.vehicleDetails}</h2>
         <label className="text-sm">
