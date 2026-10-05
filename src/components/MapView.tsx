@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Point {
   lat: number;
@@ -24,6 +24,7 @@ export default function MapView({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     let L: any;
@@ -35,19 +36,11 @@ export default function MapView({
       await import("leaflet/dist/leaflet.css");
       map = L.map(ref.current).setView(center, 13);
       mapRef.current = map;
+      setMapReady(true);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap",
       }).addTo(map);
-      for (const p of points) {
-        L.circleMarker([p.lat, p.lng], {
-          radius: 8,
-          color: p.color || "#d97706",
-          fillOpacity: 0.9,
-        })
-          .addTo(map)
-          .bindPopup(p.label || "");
-      }
       if (pick && onPick) {
         map.on("click", (e: any) => {
           L.circleMarker([e.latlng.lat, e.latlng.lng], {
@@ -64,10 +57,43 @@ export default function MapView({
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        setMapReady(false);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep center in sync
+  useEffect(() => {
+    if (mapReady) mapRef.current?.setView(center, mapRef.current.getZoom());
+  }, [center, mapReady]);
+
+  // Redraw markers whenever points change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    let cancelled = false;
+    (async () => {
+      const L = await import("leaflet");
+      if (cancelled) return;
+      // remove previous marker layer group
+      (map as any)._markerLayer?.remove();
+      const group = L.layerGroup().addTo(map);
+      (map as any)._markerLayer = group;
+      for (const p of points) {
+        L.circleMarker([p.lat, p.lng], {
+          radius: 8,
+          color: p.color || "#d97706",
+          fillOpacity: 0.9,
+        })
+          .addTo(group)
+          .bindPopup(p.label || "");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [points, mapReady]);
 
   return <div ref={ref} style={{ height, width: "100%" }} />;
 }
