@@ -27,6 +27,14 @@ export const dict = {
     orderPlaced: "Commande confirmée ! Paiement en espèces à la livraison.",
     email: "E-mail",
     password: "Mot de passe",
+    orContinueWith: "ou continuer avec",
+    tooManyRequests:
+      "Trop de tentatives. Réessayez dans quelques minutes, ou utilisez la connexion Facebook / Google.",
+    emailRateLimited:
+      "Limite d'e-mails atteinte. Réessayez dans une heure, ou connectez-vous avec Facebook / Google.",
+    signInWithFacebook: "Continuer avec Facebook",
+    signInWithGoogle: "Continuer avec Google",
+    oauthFailed: "La connexion avec {provider} a échoué. Réessayez.",
     fullName: "Nom complet",
     phone: "Téléphone",
     wilaya: "Wilaya",
@@ -101,6 +109,13 @@ export const dict = {
     orderPlaced: "تم تأكيد الطلب! الدفع نقدا عند الاستلام.",
     email: "البريد الإلكتروني",
     password: "كلمة المرور",
+    orContinueWith: "أو تابع باستخدام",
+    tooManyRequests: "محاولات كثيرة. حاول بعد بضع دقائق، أو استخدم فيسبوك / جوجل.",
+    emailRateLimited:
+      "تم تجاوز حد الإرسال. حاول بعد ساعة، أو سجّل الدخول عبر فيسبوك / جوجل.",
+    signInWithFacebook: "المتابعة عبر فيسبوك",
+    signInWithGoogle: "المتابعة عبر جوجل",
+    oauthFailed: "فشل الاتصال عبر {provider}. حاول مرة أخرى.",
     fullName: "الاسم الكامل",
     phone: "الهاتف",
     wilaya: "الولاية",
@@ -157,6 +172,10 @@ export const dict = {
 export type T = keyof typeof dict.fr;
 export function t(lang: Lang, key: T): string {
   return dict[lang][key];
+}
+
+export function withProvider(msg: string, provider: string) {
+  return msg.replace("{provider}", provider);
 }
 
 export const ROLES = ["client", "driver", "restaurateur", "fastfood", "pizza", "grocery"] as const;
