@@ -65,6 +65,19 @@ export const dict = {
     chooseDelivery: "Choisissez l'option de livraison",
     vehicles: "Véhicules de livraison",
     vehicleDetails: "Détails de votre véhicule",
+    confirmEmail: "Confirmez votre e-mail",
+    confirmEmailSent:
+      "Compte créé ! Un e-mail de confirmation a été envoyé. Cliquez sur le lien pour activer votre compte, puis connectez-vous.",
+    signedIn: "Connecté en tant que",
+    nameRequired: "Le nom complet est obligatoire.",
+    emailRequired: "L'e-mail est obligatoire.",
+    passwordRequired: "Le mot de passe est obligatoire.",
+    passwordTooShort: "Le mot de passe doit contenir au moins 6 caractères.",
+    invalidCredentials: "E-mail ou mot de passe incorrect.",
+    emailNotConfirmed:
+      "Cet e-mail n'est pas encore confirmé. Vérifiez votre boîte de réception.",
+    loading: "Chargement…",
+    signingIn: "Connexion…",
   },
   ar: {
     appName: "سهلة فود",
@@ -126,6 +139,18 @@ export const dict = {
     chooseDelivery: "اختر خيار التوصيل",
     vehicles: "مركبات التوصيل",
     vehicleDetails: "تفاصيل مركبتك",
+    confirmEmail: "أكّد بريدك الإلكتروني",
+    confirmEmailSent:
+      "تم إنشاء الحساب! تم إرسال رسالة تأكيد إلى بريدك. اضغط على الرابط لتفعيل الحساب ثم سجّل الدخول.",
+    signedIn: "مسجل الدخول باسم",
+    nameRequired: "الاسم الكامل إجباري.",
+    emailRequired: "البريد الإلكتروني إجباري.",
+    passwordRequired: "كلمة المرور إجبارية.",
+    passwordTooShort: "كلمة المرور يجب أن تكون 6 أحرف على الأقل.",
+    invalidCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    emailNotConfirmed: "لم يتم تأكيد هذا البريد بعد. تحقق من رسائلك.",
+    loading: "جارٍ التحميل…",
+    signingIn: "جارٍ الدخول…",
   },
 } as const;
 
