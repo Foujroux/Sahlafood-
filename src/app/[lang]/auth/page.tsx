@@ -3,42 +3,9 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { dict, roleLabel, withProvider, ROLES, type Lang } from "@/lib/i18n";
+import { dict, roleLabel, ROLES, type Lang } from "@/lib/i18n";
 import { neonAuth } from "@/lib/auth-client";
 import { useSession } from "@/hooks/useSession";
-
-type OAuthProvider = "facebook" | "google";
-
-function FacebookIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-      <path
-        fill="currentColor"
-        d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.96h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07Z"
-      />
-    </svg>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.3c1.9-1.8 3-4.4 3-7.5 0-.7-.1-1.4-.2-2H12Z" />
-      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.7-2.4l-3.3-2.6c-.9.6-2.1 1-3.4 1a5.9 5.9 0 0 1-5.5-4.1H3.1v2.6A10 10 0 0 0 12 22Z" />
-      <path fill="#FBBC05" d="M6.5 13.9a6 6 0 0 1 0-3.8V7.5H3.1a10 10 0 0 0 0 9l3.4-2.6Z" />
-      <path fill="#4285F4" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.9 5.5l3.4 2.6A5.9 5.9 0 0 1 12 6Z" />
-    </svg>
-  );
-}
-
-const OAUTH_PROVIDERS: {
-  id: OAuthProvider;
-  label: "signInWithFacebook" | "signInWithGoogle";
-  Icon: () => React.JSX.Element;
-}[] = [
-  { id: "facebook", label: "signInWithFacebook", Icon: FacebookIcon },
-  { id: "google", label: "signInWithGoogle", Icon: GoogleIcon },
-];
 
 export default function AuthPage({
   params,
@@ -58,7 +25,6 @@ export default function AuthPage({
   const [role, setRole] = useState("client");
 
   const [busy, setBusy] = useState(false);
-  const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -126,24 +92,6 @@ export default function AuthPage({
     } catch (e2) {
       setErr((e2 as Error).message);
       setBusy(false);
-    }
-  }
-
-  async function oauth(provider: OAuthProvider, label: string) {
-    setErr("");
-    setMsg("");
-    setOauthBusy(provider);
-
-    try {
-      const res = await neonAuth.signInSocial(provider);
-      // On success the call navigates away, so only a failure reaches here.
-      if (res.error) {
-        setOauthBusy(null);
-        setErr(withProvider(t.oauthFailed, label));
-      }
-    } catch (e2) {
-      setOauthBusy(null);
-      setErr((e2 as Error).message);
     }
   }
 
@@ -252,23 +200,6 @@ export default function AuthPage({
               ? t.register
               : t.login}
         </button>
-        <div className="my-1 flex items-center gap-3 text-xs text-slate-500">
-          <span className="h-px flex-1 bg-slate-300" />
-          {t.orContinueWith}
-          <span className="h-px flex-1 bg-slate-300" />
-        </div>
-        {OAUTH_PROVIDERS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => oauth(id, t[label])}
-            disabled={busy || oauthBusy !== null}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Icon />
-            {oauthBusy === id ? t.loading : t[label]}
-          </button>
-        ))}
         <button
           type="button"
           onClick={() => {

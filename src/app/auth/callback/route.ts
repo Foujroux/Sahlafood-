@@ -11,13 +11,15 @@ function isLang(v: string | undefined): v is "fr" | "ar" {
 }
 
 /**
- * Landing point after an OAuth redirect.
+ * Ensures a profile row exists for the signed-in user, then sends them to their
+ * account page.
  *
- * Neon Auth (Better Auth) sets the session cookie before redirecting here, so
- * there is no code exchange to perform. All this does is make sure the profile
- * row exists, then send the user on.
+ * Neon Auth has no signup trigger equivalent to Supabase's handle_new_user(),
+ * so the profile is created here instead. Idempotent, and RLS allows a user to
+ * write only their own row.
  *
- * The language rides in a cookie because the provider owns the query string.
+ * Kept as a route because OAuth redirects land here; sign-up and sign-in from
+ * the auth form apply the profile themselves and go straight to /compte.
  */
 export async function GET(request: NextRequest) {
   const { origin } = new URL(request.url);
@@ -32,9 +34,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(back);
   }
 
-  // Neon Auth has no signup trigger equivalent to Supabase's
-  // handle_new_user(), so the profile is created here instead. Idempotent, and
-  // RLS allows only the caller's own row.
   try {
     await withUser(session.userId, async (client) => {
       await client.query(

@@ -86,25 +86,6 @@ export const neonAuth = {
     return parse(res);
   },
 
-  /**
-   * Starts the OAuth handshake by asking the server for an absolute URL.
-   * Redirecting from the browser directly fails because Better Auth requires a
-   * matching Origin header, which a server-side redirect supplies.
-   */
-  async signInSocial(provider: "google" | "facebook"): Promise<AuthResponse> {
-    const res = await fetch(`/api/auth/social?provider=${provider}`, {
-      method: "POST",
-    });
-    if (!res.ok) {
-      const { error, status } = await parse(res);
-      return { user: null, error, status };
-    }
-    const { url } = (await res.json()) as { url: string };
-    window.location.assign(url);
-    // Navigation is in flight; nothing useful to return.
-    return { user: null, error: null, status: res.status };
-  },
-
   async signOut(): Promise<void> {
     await fetch("/api/auth/signout", { method: "POST" }).catch(() => {});
   },
