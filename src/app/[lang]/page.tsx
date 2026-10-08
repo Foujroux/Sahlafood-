@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { dict, type Lang } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
 import { haversineKm } from "@/lib/delivery";
+import { api, type Restaurant } from "@/lib/data";
 import { use } from "react";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
-// SSR stays on so the banner is in the initial HTML; it only touches the
-// Supabase browser client inside useEffect.
+// SSR stays on so the banner is in the initial HTML; it only asks the server
+// for the session inside useEffect.
 const AuthBanner = dynamic(() => import("@/components/AuthBanner"));
 
 const DEFAULT_POS: [number, number] = [36.7525, 3.042]; // Alger
@@ -22,7 +22,8 @@ export default function Home({
 }) {
   const { lang } = use(params);
   const t = dict[lang];
-  const [shops, setShops] = useState<any[]>([]);
+  const [shops, setShops] = useState<Restaurant[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [filter, setFilter] = useState<"all" | "restaurant" | "grocery">(
     "all"
   );
@@ -30,17 +31,24 @@ export default function Home({
   const [view, setView] = useState<"list" | "map">("list");
 
   useEffect(() => {
-    supabase
-      .from("restaurants")
-      .select("*")
-      .order("rating", { ascending: false })
-      .then(({ data }) => setShops(data || []));
+    let cancelled = false;
+    api
+      .restaurants()
+      .then(({ restaurants }) => {
+        if (!cancelled) setShops(restaurants);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setLoadError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const enriched = useMemo(() => {
     const p = pos || DEFAULT_POS;
     return shops.map((s) => {
-      const distanceKm = haversineKm(p[0], p[1], s.lat, s.lng);
+      const distanceKm = haversineKm(p[0], p[1], s.lat ?? p[0], s.lng ?? p[1]);
       const fee = Math.round(100 + 40 * distanceKm);
       const eta = Math.max(10, Math.round((distanceKm / 25) * 60) + 10);
       return { ...s, distanceKm, fee, eta };
@@ -116,17 +124,25 @@ export default function Home({
           center={pos || DEFAULT_POS}
           pick
           onPick={(la, ln) => setPos([la, ln])}
-          points={shown.map((s) => ({
-            lat: s.lat,
-            lng: s.lng,
-            label: lang === "ar" ? s.name_ar : s.name_fr,
-            color: s.type === "grocery" ? "#16a34a" : "#d97706",
-          }))}
+          points={shown
+            .filter((s) => s.lat != null && s.lng != null)
+            .map((s) => ({
+              lat: s.lat as number,
+              lng: s.lng as number,
+              label: lang === "ar" ? s.name_ar : s.name_fr,
+              color: s.type === "grocery" ? "#16a34a" : "#d97706",
+            }))}
           height={view === "map" ? 420 : 240}
         />
       </div>
 
-      {view === "list" && (
+      {loadError && (
+        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {loadError}
+        </p>
+      )}
+
+      {view === "list" && !loadError && (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           {shown.map((s) => (
             <li key={s.id} className="rounded-xl border bg-white p-4 shadow-sm">

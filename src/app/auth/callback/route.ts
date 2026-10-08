@@ -1,46 +1,52 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { createBrowserClient } from "@supabase/ssr";
+import { getSession } from "@/lib/session";
+import { withUser } from "@/lib/db";
 
-// OAuth entry point. Supabase redirects back here with ?code=..., which is
-// exchanged for a session so the cookie-backed client picks it up. Then we
-// forward to the account page.
-//
-// The language is carried through a cookie rather than the query string,
-// because Supabase owns the query and would drop our parameters.
+export const dynamic = "force-dynamic";
+
 const FALLBACK_LANG = "fr";
 
-function isLang(v: string | undefined | null): v is "fr" | "ar" {
+function isLang(v: string | undefined): v is "fr" | "ar" {
   return v === "fr" || v === "ar";
 }
 
+/**
+ * Landing point after an OAuth redirect.
+ *
+ * Neon Auth (Better Auth) sets the session cookie before redirecting here, so
+ * there is no code exchange to perform. All this does is make sure the profile
+ * row exists, then send the user on.
+ *
+ * The language rides in a cookie because the provider owns the query string.
+ */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
-
-  // Set by the auth page before redirecting out, so the user lands back in
-  // the language they started in.
+  const { origin } = new URL(request.url);
   const cookieLang = request.cookies.get("sf_lang")?.value;
   const lang = isLang(cookieLang) ? cookieLang : FALLBACK_LANG;
 
-  if (code) {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+  const session = await getSession();
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      const back = new URL(`/${lang}/auth`, origin);
-      back.searchParams.set("error", "oauth_callback_failed");
-      return NextResponse.redirect(back);
-    }
+  if (!session) {
+    const back = new URL(`/${lang}/auth`, origin);
+    back.searchParams.set("error", "signin_failed");
+    return NextResponse.redirect(back);
   }
 
-  // No code and no error means someone hit the route directly; send them to
-  // the sign-in page rather than a blank account page.
-  const target = new URL(
-    code ? `/${lang}/compte` : `/${lang}/auth`,
-    origin
-  );
-  return NextResponse.redirect(target);
+  // Neon Auth has no signup trigger equivalent to Supabase's
+  // handle_new_user(), so the profile is created here instead. Idempotent, and
+  // RLS allows only the caller's own row.
+  try {
+    await withUser(session.userId, async (client) => {
+      await client.query(
+        `insert into public.profiles (id, full_name, role, preferred_language)
+         values ($1, $2, 'client', $3)
+         on conflict (id) do nothing`,
+        [session.userId, session.email ?? "", lang]
+      );
+    });
+  } catch {
+    // A missing profile shouldn't block sign-in; the account page repairs it.
+  }
+
+  return NextResponse.redirect(`${origin}/${lang}/compte`);
 }

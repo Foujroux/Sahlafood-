@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
+import { usePathname } from "next/navigation";
 import { dict, LANGS, type Lang } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
+import { useSession } from "@/hooks/useSession";
 
 // Inline SVG so the nav needs no icon dependency.
 function BasketIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -29,25 +27,9 @@ function BasketIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 export default function Nav({ lang }: { lang: Lang }) {
   const pathname = usePathname();
-  const router = useRouter();
   const rest = pathname.replace(/^\/(fr|ar)/, "");
   const t = dict[lang];
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) =>
-      setUser(session?.user ?? null)
-    );
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  async function logout() {
-    await supabase.auth.signOut();
-    setUser(null);
-    router.push(`/${lang}`);
-    router.refresh();
-  }
+  const { user, signOut } = useSession();
 
   return (
     <header className="bg-amber-600 text-white">
@@ -82,7 +64,7 @@ export default function Nav({ lang }: { lang: Lang }) {
             <>
               <Link href={`/${lang}/compte`}>{t.account}</Link>
               <button
-                onClick={logout}
+                onClick={signOut}
                 className="underline underline-offset-2"
               >
                 {t.logout}

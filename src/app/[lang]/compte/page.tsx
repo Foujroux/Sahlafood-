@@ -2,10 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { dict, roleLabel, type Lang } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
+import {
+  api,
+  type MenuItem,
+  type Profile,
+  type Restaurant,
+} from "@/lib/data";
+import { useSession } from "@/hooks/useSession";
 import { use } from "react";
 
 const VENDOR_ROLES = ["restaurateur", "fastfood", "pizza", "grocery"];
+
+type ShopDraft = Partial<Restaurant> & { id?: string };
 
 export default function ComptePage({
   params,
@@ -14,82 +22,148 @@ export default function ComptePage({
 }) {
   const { lang } = use(params);
   const t = dict[lang];
-  const [user, setUser] = useState<any>(null);
-  const [p, setP] = useState<any>({});
+  const { user, loading, signOut } = useSession();
+
+  const [p, setP] = useState<Partial<Profile>>({});
   const [msg, setMsg] = useState("");
-  const [shop, setShop] = useState<any | null>(null);
+  const [shop, setShop] = useState<ShopDraft | null>(null);
   const [shopLoaded, setShopLoaded] = useState(false);
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<MenuItem[]>([]);
   const [newItem, setNewItem] = useState({ name_fr: "", name_ar: "", price: "", image: "" });
   const [shopMsg, setShopMsg] = useState("");
 
-  const isVendor = VENDOR_ROLES.includes(p.role);
+  const isVendor = VENDOR_ROLES.includes(p.role ?? "");
   const isDriver = p.role === "driver";
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      setUser(data.user);
-      if (data.user) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", data.user.id)
-          .single();
-        setP(prof || {});
-        const { data: shops } = await supabase
-          .from("restaurants")
-          .select("*")
-          .eq("owner_id", data.user.id)
-          .limit(1);
-        if (shops && shops.length) {
-          setShop(shops[0]);
-          const { data: its } = await supabase
-            .from("menu_items")
-            .select("*")
-            .eq("restaurant_id", shops[0].id);
-          setItems(its || []);
+    if (!user) return;
+
+    // Captured so the narrowing survives into the async closure below, where
+    // TypeScript can no longer see the guard.
+    const userId = user.id;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        // First visit after signup: apply the role and phone chosen on the
+        // auth form, then drop the stash. Done before the profile read so the
+        // vendor and driver sections render straight away.
+        const raw = sessionStorage.getItem("sf-onboarding");
+        if (raw) {
+          sessionStorage.removeItem("sf-onboarding");
+          try {
+            const onboarding = JSON.parse(raw) as {
+              role?: string;
+              phone?: string;
+              lang?: string;
+            };
+            const patch: Partial<Profile> = {};
+            if (onboarding.role) patch.role = onboarding.role;
+            if (onboarding.phone) patch.phone = onboarding.phone;
+            patch.preferred_language = onboarding.lang ?? lang;
+            if (Object.keys(patch).length > 1) {
+              const { profile } = await api.updateProfile(patch);
+              if (!cancelled) setP(profile);
+            }
+          } catch {
+            // Malformed stash: fall through to a plain profile read.
+          }
         }
-        setShopLoaded(true);
+
+        const [{ profile }, { restaurants }] = await Promise.all([
+          api.profile(),
+          api.restaurants(),
+        ]);
+        if (cancelled) return;
+
+        setP(profile ?? {});
+
+        // Ownership is enforced by RLS, so filtering client-side here is just
+        // presentation; a non-owner could not have written the row anyway.
+        const mine = restaurants.find((r) => r.owner_id === userId);
+        if (mine) {
+          setShop(mine);
+          const { items: its } = await api.restaurant(mine.id);
+          if (!cancelled) setItems(its);
+        }
+      } catch (err) {
+        if (!cancelled) setMsg((err as Error).message);
+      } finally {
+        if (!cancelled) setShopLoaded(true);
       }
-    });
-  }, []);
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   async function save() {
     if (!user) return;
-    if (isVendor && (!p.wilaya || !p.commune || !p.address))
+
+    if (isVendor && (!p.wilaya || !p.commune || !p.address)) {
       return setMsg(
         lang === "fr"
           ? "Adresse complète (wilaya, commune, adresse) obligatoire pour les vendeurs."
           : "العنوان الكامل إجباري لأصحاب المتاجر."
       );
-    const { error } = await supabase
-      .from("profiles")
-      .upsert({ ...p, id: user.id });
-    setMsg(error ? error.message : "✅");
+    }
+
+    try {
+      // The id is applied server-side from the session, so no field here can
+      // redirect this write to another account.
+      const { profile } = await api.updateProfile(p);
+      setP(profile);
+      setMsg("✅");
+    } catch (err) {
+      setMsg((err as Error).message);
+    }
   }
 
   async function saveShop() {
     if (!user || !shop) return;
+
     const payload = {
-      ...shop,
-      owner_id: user.id,
+      name_fr: shop.name_fr ?? "",
+      name_ar: shop.name_ar ?? "",
       type: p.role === "grocery" ? "grocery" : "restaurant",
+      category_fr: shop.category_fr ?? "",
+      category_ar: shop.category_ar ?? "",
+      phone: shop.phone ?? "",
+      wilaya: shop.wilaya ?? "",
+      commune: shop.commune ?? "",
+      address: shop.address ?? "",
+      image: shop.image ?? "",
+      lat: shop.lat ?? 36.7525,
+      lng: shop.lng ?? 3.042,
     };
-    const { data, error } = shop.id
-      ? await supabase.from("restaurants").update(payload).eq("id", shop.id).select().single()
-      : await supabase.from("restaurants").insert(payload).select().single();
-    if (!error && data) setShop(data);
-    setShopMsg(error ? error.message : "✅");
+
+    try {
+      if (shop.id) {
+        await api.updateRestaurant(shop.id, payload);
+        setShop((prev) => (prev ? { ...prev, ...payload } : prev));
+      } else {
+        const { shop: created } = await api.createRestaurant(payload);
+        setShop(created);
+        setShopMsg("✅");
+        return;
+      }
+      setShopMsg("✅");
+    } catch (err) {
+      setShopMsg((err as Error).message);
+    }
   }
 
-  async function createShop() {
+  function createShop() {
     setShop({
-      name_fr: p.full_name ? `${p.full_name}` : "",
+      name_fr: p.full_name ?? "",
       name_ar: "",
-      phone: p.phone || "",
-      wilaya: p.wilaya || "",
-      commune: p.commune || "",
-      address: p.address || "",
+      type: p.role === "grocery" ? "grocery" : "restaurant",
+      phone: p.phone ?? "",
+      wilaya: p.wilaya ?? "",
+      commune: p.commune ?? "",
+      address: p.address ?? "",
       category_fr: "",
       category_ar: "",
       rating: 5,
@@ -102,57 +176,89 @@ export default function ComptePage({
 
   async function addItem() {
     if (!shop?.id || !newItem.name_fr || !newItem.price) return;
-    const { data, error } = await supabase
-      .from("menu_items")
-      .insert({
+
+    try {
+      const { item } = await api.createMenuItem({
         restaurant_id: shop.id,
         name_fr: newItem.name_fr,
-        name_ar: newItem.name_ar || newItem.name_fr,
+        name_ar: newItem.name_ar || undefined,
         price: Number(newItem.price),
         image: newItem.image || null,
-      })
-      .select()
-      .single();
-    if (!error && data) setItems([...items, data]);
-    setShopMsg(error ? error.message : "✅");
-    setNewItem({ name_fr: "", name_ar: "", price: "", image: "" });
+      });
+      setItems((prev) => [...prev, item]);
+      setShopMsg("✅");
+      setNewItem({ name_fr: "", name_ar: "", price: "", image: "" });
+    } catch (err) {
+      setShopMsg((err as Error).message);
+    }
   }
 
   async function removeItem(id: string) {
-    const { error } = await supabase.from("menu_items").delete().eq("id", id);
-    if (!error) setItems(items.filter((i) => i.id !== id));
+    try {
+      await api.deleteMenuItem(id);
+      setItems((prev) => prev.filter((i) => i.id !== id));
+    } catch (err) {
+      setShopMsg((err as Error).message);
+    }
   }
 
-  if (!user)
+  if (loading) {
+    return (
+      <main className="p-4">
+        <p className="text-sm text-slate-600">{t.loading}</p>
+      </main>
+    );
+  }
+
+  if (!user) {
     return (
       <main className="p-4">
         <p>{t.needLogin}</p>
+        <button
+          onClick={signOut}
+          className="mt-3 rounded-lg border border-red-600 px-4 py-2 text-red-600"
+        >
+          {t.logout}
+        </button>
       </main>
     );
+  }
 
   const inp = "w-full rounded-lg border p-2 text-sm";
-  const f = (k: string, label: string, type = "text") => (
+  const f = (k: keyof Profile, label: string, type = "text") => (
     <input
       className={inp}
       type={type}
       placeholder={label}
-      value={p[k] ?? ""}
-      onChange={(e) => setP({ ...p, [k]: type === "number" ? Number(e.target.value) : e.target.value })}
+      value={(p[k] as string | number | null) ?? ""}
+      onChange={(e) =>
+        setP({
+          ...p,
+          [k]: type === "number" ? Number(e.target.value) : e.target.value,
+        })
+      }
     />
   );
-  const s = (k: string, placeholder: string, type = "text") => (
+  const s = (k: keyof Restaurant, placeholder: string, type = "text") => (
     <input
       className={inp}
       type={type}
       placeholder={placeholder}
-      value={shop?.[k] ?? ""}
-      onChange={(e) => setShop({ ...shop, [k]: type === "number" ? Number(e.target.value) : e.target.value })}
+      value={(shop?.[k] as string | number | null) ?? ""}
+      onChange={(e) =>
+        setShop({
+          ...shop,
+          [k]: type === "number" ? Number(e.target.value) : e.target.value,
+        } as ShopDraft)
+      }
     />
   );
 
   return (
     <main className="mx-auto max-w-md p-4">
       <h1 className="text-xl font-bold">{t.account}</h1>
+      <p className="mt-1 break-all text-sm text-slate-600">{user.email}</p>
+
       <div className="mt-3 grid gap-2">
         {f("full_name", t.fullName)}
         {f("phone", t.phone)}
@@ -190,6 +296,13 @@ export default function ComptePage({
           {t.save}
         </button>
         {msg && <p>{msg}</p>}
+
+        <button
+          onClick={signOut}
+          className="rounded-lg border border-red-600 px-4 py-2 text-red-600"
+        >
+          {t.logout}
+        </button>
       </div>
 
       {isVendor && shopLoaded && (
@@ -212,14 +325,6 @@ export default function ComptePage({
               {s("commune", t.commune)}
               {s("address", t.address)}
               {s("image", lang === "fr" ? "URL photo" : "رابط الصورة")}
-              <label className="text-sm">
-                <input
-                  type="checkbox"
-                  checked={!!shop.is_open}
-                  onChange={(e) => setShop({ ...shop, is_open: e.target.checked })}
-                />{" "}
-                {shop.is_open ? t.open : t.closed}
-              </label>
               <button onClick={saveShop} className="rounded-lg bg-amber-600 px-4 py-2 text-white">
                 {t.save}
               </button>

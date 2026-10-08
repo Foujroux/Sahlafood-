@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { dict, type Lang } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
+import { api, clearCart, readCart, type CartLine, type Restaurant } from "@/lib/data";
 import { deliveryOptions, haversineKm } from "@/lib/delivery";
+import { useSession } from "@/hooks/useSession";
 import { use } from "react";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -18,31 +19,29 @@ export default function CommanderPage({
 }) {
   const { lang } = use(params);
   const t = dict[lang];
-  const [user, setUser] = useState<any>(undefined);
-  const [cart, setCart] = useState<any[]>([]);
-  const [shop, setShop] = useState<any>(null);
+  const { user, loading } = useSession();
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [shop, setShop] = useState<Restaurant | null>(null);
   const [pos, setPos] = useState<[number, number] | null>(null);
   const [vehicle, setVehicle] = useState<"bike" | "car" | null>(null);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-    try {
-      const c = JSON.parse(localStorage.getItem("sahlafood-cart") || "[]");
-      setCart(c);
-      if (c.length > 0) {
-        supabase
-          .from("restaurants")
-          .select("*")
-          .eq("id", c[0].shopId)
-          .single()
-          .then(({ data }) => setShop(data));
-      }
-    } catch {}
+    const c = readCart();
+    setCart(c);
+    if (c.length > 0) {
+      api
+        .restaurant(c[0].shopId)
+        .then((data) => setShop(data.shop))
+        .catch(() => setShop(null));
+    }
   }, []);
 
   const p = pos || DEFAULT_POS;
-  const distance = shop ? haversineKm(shop.lat, shop.lng, p[0], p[1]) : 0;
+  const distance =
+    shop?.lat != null && shop?.lng != null
+      ? haversineKm(shop.lat, shop.lng, p[0], p[1])
+      : 0;
   const options = useMemo(() => deliveryOptions(distance), [distance]);
   const subtotal = cart.reduce((s, i) => s + Number(i.price), 0);
   const chosen = options.find((o) => o.vehicle === vehicle);
@@ -50,22 +49,28 @@ export default function CommanderPage({
   async function place() {
     if (!user) return setMsg(t.needLogin);
     if (!vehicle) return setMsg(t.chooseDelivery);
-    const { error } = await supabase.from("orders").insert({
-      user_id: user.id,
-      restaurant_id: shop?.id,
-      items: cart,
-      delivery_vehicle: vehicle,
-      delivery_fee: chosen?.fee || 0,
-      total: subtotal + (chosen?.fee || 0),
-      address: `${p[0].toFixed(5)}, ${p[1].toFixed(5)}`,
-      lat: p[0],
-      lng: p[1],
-      payment_method: "cash_on_delivery",
-    });
-    if (error) return setMsg(error.message);
-    localStorage.removeItem("sahlafood-cart");
-    setCart([]);
-    setMsg("✅ " + t.orderPlaced);
+    if (!shop) return setMsg(t.needLogin);
+
+    try {
+      // user_id is applied server-side from the session; it is never sent from
+      // the browser, so an order can't be filed under someone else's account.
+      await api.createOrder({
+        restaurant_id: shop.id,
+        items: cart,
+        delivery_vehicle: vehicle,
+        delivery_fee: chosen?.fee || 0,
+        total: subtotal + (chosen?.fee || 0),
+        address: `${p[0].toFixed(5)}, ${p[1].toFixed(5)}`,
+        lat: p[0],
+        lng: p[1],
+        payment_method: "cash_on_delivery",
+      });
+      clearCart();
+      setCart([]);
+      setMsg("✅ " + t.orderPlaced);
+    } catch (err) {
+      setMsg((err as Error).message);
+    }
   }
 
   return (
@@ -88,11 +93,11 @@ export default function CommanderPage({
 
           <h2 className="mt-4 font-semibold">{t.chooseLocation}</h2>
           <MapView
-            center={shop ? [shop.lat, shop.lng] : DEFAULT_POS}
+            center={shop?.lat != null && shop?.lng != null ? [shop.lat, shop.lng] : DEFAULT_POS}
             pick
             onPick={(la, ln) => setPos([la, ln])}
             points={
-              shop
+              shop?.lat != null && shop?.lng != null
                 ? [{ lat: shop.lat, lng: shop.lng, label: shop.name_fr }]
                 : []
             }
@@ -128,7 +133,7 @@ export default function CommanderPage({
           </ul>
 
           <p className="mt-3 text-sm">💵 {t.payOnDelivery}</p>
-          {!user && user !== undefined && (
+          {!user && !loading && (
             <p className="mt-1 text-sm text-red-600">{t.needLogin}</p>
           )}
           <button

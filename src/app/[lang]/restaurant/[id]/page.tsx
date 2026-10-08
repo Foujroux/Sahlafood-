@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { dict, type Lang } from "@/lib/i18n";
-import { supabase } from "@/lib/supabase";
-import { use } from "react";
+import { api, readCart, writeCart, type CartLine, type MenuItem, type Restaurant } from "@/lib/data";
+import { useSession } from "@/hooks/useSession";
 
 export default function RestaurantPage({
   params,
@@ -13,10 +13,12 @@ export default function RestaurantPage({
 }) {
   const { lang, id } = use(params);
   const t = dict[lang];
-  const [shop, setShop] = useState<any>(null);
-  const [items, setItems] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const { user } = useSession();
+
+  const [shop, setShop] = useState<Restaurant | null>(null);
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [error, setError] = useState("");
   const [adPhoto, setAdPhoto] = useState("");
   const [newItem, setNewItem] = useState({
     name_fr: "",
@@ -27,55 +29,67 @@ export default function RestaurantPage({
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    supabase
-      .from("restaurants")
-      .select("*")
-      .eq("id", id)
-      .single()
-      .then(({ data }) => setShop(data));
-    supabase
-      .from("menu_items")
-      .select("*")
-      .eq("restaurant_id", id)
-      .then(({ data }) => setItems(data || []));
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-    try {
-      setCart(JSON.parse(localStorage.getItem("sahlafood-cart") || "[]"));
-    } catch {}
+    let cancelled = false;
+    api
+      .restaurant(id)
+      .then((data) => {
+        if (cancelled) return;
+        setShop(data.shop);
+        setItems(data.items);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    setCart(readCart());
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  function add(item: any) {
-    const next = [...cart, { ...item, shopId: id, shopName: shop?.name_fr }];
+  function add(item: MenuItem) {
+    const next = [
+      ...cart,
+      { ...item, shopId: id, shopName: shop?.name_fr ?? "" },
+    ];
     setCart(next);
-    localStorage.setItem("sahlafood-cart", JSON.stringify(next));
+    writeCart(next);
   }
 
   async function setShopPhoto() {
     if (!adPhoto) return;
-    const { error } = await supabase
-      .from("restaurants")
-      .update({ image: adPhoto })
-      .eq("id", id);
-    if (!error) setShop({ ...shop, image: adPhoto });
-    setMsg(error ? error.message : "✅");
+    try {
+      await api.updateRestaurant(id, { image: adPhoto });
+      setShop((prev) => (prev ? { ...prev, image: adPhoto } : prev));
+      setMsg("✅");
+    } catch (err) {
+      setMsg((err as Error).message);
+    }
   }
 
   async function addAdItem() {
     if (!newItem.name_fr || !newItem.price) return;
-    const { data, error } = await supabase
-      .from("menu_items")
-      .insert({
+    try {
+      const { item } = await api.createMenuItem({
         restaurant_id: id,
         name_fr: newItem.name_fr,
-        name_ar: newItem.name_ar || newItem.name_fr,
+        name_ar: newItem.name_ar || undefined,
         price: Number(newItem.price),
         image: newItem.image || null,
-      })
-      .select()
-      .single();
-    if (!error && data) setItems([...items, data]);
-    setMsg(error ? error.message : "✅");
-    setNewItem({ name_fr: "", name_ar: "", price: "", image: "" });
+      });
+      setItems((prev) => [...prev, item]);
+      setMsg("✅");
+      setNewItem({ name_fr: "", name_ar: "", price: "", image: "" });
+    } catch (err) {
+      setMsg((err as Error).message);
+    }
+  }
+
+  if (error) {
+    return (
+      <main className="mx-auto max-w-2xl p-4">
+        <p className="text-sm text-red-600">{error}</p>
+      </main>
+    );
   }
 
   if (!shop) return <main className="p-4">…</main>;

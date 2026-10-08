@@ -3,44 +3,79 @@
 #
 # The platform linker refuses to dlopen() native addons whose real path is not
 # under a permitted directory. Anything living under /root hits
-# ERR_DLOPEN_FAILED, which breaks Tailwind's oxide engine (and lightningcss,
-# and Turbopack's native bindings).
+# ERR_DLOPEN_FAILED, which breaks Tailwind's oxide engine and lightningcss
+# (and Turbopack's native bindings).
 #
-# Copying the addon to a permitted path fixes it. A symlink does NOT: the
-# linker resolves the real path, so the symlink is rejected the same way.
+# Copying the addon to a permitted path fixes it. A symlink to the .node does
+# NOT: the linker resolves the real path, so it is rejected the same way. What
+# works is replacing the whole installed package directory with a symlink whose
+# target lives under /data, since that resolves correctly.
 #
-# Idempotent; safe to re-run. Sets NAPI_RS_NATIVE_LIBRARY_PATH for oxide, which
-# then needs to be present in .env.local (see the note written at the end).
+# Idempotent; safe to re-run. Run it after every `npm install`, which replaces
+# node_modules and undoes the lightningcss link.
 
 set -eu
 
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 STAGE_DIR=/data/local/tmp/sahlafood-native
-OXIDE_BIN=tailwindcss-oxide.android-arm64.node
-OXIDE_SRC="$PROJECT_DIR/node_modules/@tailwindcss/oxide-android-arm64/$OXIDE_BIN"
-OXIDE_DST="$STAGE_DIR/$OXIDE_BIN"
 
 mkdir -p "$STAGE_DIR"
 
-if [ ! -f "$OXIDE_SRC" ]; then
-  echo "oxide binary not found at: $OXIDE_SRC" >&2
-  echo "run 'npm install' first" >&2
+stage_file() {
+  # stage_file <source> <staged-filename>
+  src=$1
+  dst="$STAGE_DIR/$2"
+  if [ ! -f "$src" ]; then
+    echo "skip (not installed): $src" >&2
+    return 0
+  fi
+  if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ]; then
+    cp "$src" "$dst"
+    echo "staged $dst"
+  else
+    echo "already staged: $dst"
+  fi
+}
+
+# --- Tailwind oxide -------------------------------------------------------
+# Reads NAPI_RS_NATIVE_LIBRARY_PATH, so staging the file is enough.
+OXIDE_BIN=tailwindcss-oxide.android-arm64.node
+OXIDE_SRC="$PROJECT_DIR/node_modules/@tailwindcss/oxide-android-arm64/$OXIDE_BIN"
+OXIDE_DST="$STAGE_DIR/$OXIDE_BIN"
+stage_file "$OXIDE_SRC" "$OXIDE_BIN"
+
+# --- lightningcss ---------------------------------------------------------
+# No environment escape hatch, so the package directory itself is replaced.
+LCSS_BIN=lightningcss.android-arm64.node
+LCSS_PKG="$PROJECT_DIR/node_modules/lightningcss-android-arm64"
+LCSS_STAGE="$STAGE_DIR/lightningcss-android-arm64"
+
+if [ -L "$LCSS_PKG" ]; then
+  echo "already linked: $LCSS_PKG -> $(readlink "$LCSS_PKG")"
+elif [ -d "$LCSS_PKG" ]; then
+  mkdir -p "$LCSS_STAGE"
+  cp "$LCSS_PKG/$LCSS_BIN" "$LCSS_STAGE/$LCSS_BIN"
+  cp "$LCSS_PKG/package.json" "$LCSS_STAGE/package.json"
+  rm -rf "$LCSS_PKG"
+  ln -s "$LCSS_STAGE" "$LCSS_PKG"
+  echo "linked $LCSS_PKG -> $LCSS_STAGE"
+else
+  echo "skip lightningcss (package not installed)"
+fi
+
+# --- verify ---------------------------------------------------------------
+# Confirm both actually load before reporting success.
+if node -e "process.env.NAPI_RS_NATIVE_LIBRARY_PATH='$OXIDE_DST'; require('@tailwindcss/oxide')" 2>/dev/null; then
+  echo "verified: @tailwindcss/oxide loads"
+else
+  echo "verification FAILED: oxide cannot load from $OXIDE_DST" >&2
   exit 1
 fi
 
-# Re-copy when missing or when the installed version changed.
-if [ ! -f "$OXIDE_DST" ] || [ "$OXIDE_SRC" -nt "$OXIDE_DST" ]; then
-  cp "$OXIDE_SRC" "$OXIDE_DST"
-  echo "staged $OXIDE_DST"
+if node -e "require('lightningcss')" 2>/dev/null; then
+  echo "verified: lightningcss loads"
 else
-  echo "already up to date: $OXIDE_DST"
-fi
-
-# Verify the copy actually loads before we tell anyone it is fixed.
-if node -e "process.env.NAPI_RS_NATIVE_LIBRARY_PATH='$OXIDE_DST'; require('@tailwindcss/oxide')" 2>/dev/null; then
-  echo "verified: @tailwindcss/oxide loads from the staged path"
-else
-  echo "verification FAILED: oxide still cannot load from $OXIDE_DST" >&2
+  echo "verification FAILED: lightningcss cannot load from $LCSS_PKG" >&2
   exit 1
 fi
 
@@ -57,3 +92,8 @@ else
   printf '\n%s\n' "$LINE" >> "$ENV_LOCAL"
   echo "added NAPI_RS_NATIVE_LIBRARY_PATH to $ENV_LOCAL"
 fi
+
+echo
+echo "Reminders:"
+echo "  - re-run this script after any 'npm install'"
+echo "  - this is a Termux workaround; it is not needed on Linux/macOS/CI"
