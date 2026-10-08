@@ -9,6 +9,9 @@ import { haversineKm } from "@/lib/delivery";
 import { use } from "react";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+// SSR stays on so the banner is in the initial HTML; it only touches the
+// Supabase browser client inside useEffect.
+const AuthBanner = dynamic(() => import("@/components/AuthBanner"));
 
 const DEFAULT_POS: [number, number] = [36.7525, 3.042]; // Alger
 
@@ -64,6 +67,7 @@ export default function Home({
   return (
     <main className="mx-auto max-w-4xl p-4">
       <h1 className="text-2xl font-bold">{t.tagline}</h1>
+      <AuthBanner lang={lang} />
       <img
         src="/1791131299258.jpg"
         alt=""

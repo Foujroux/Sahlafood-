@@ -7,6 +7,26 @@ import type { User } from "@supabase/supabase-js";
 import { dict, LANGS, type Lang } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 
+// Inline SVG so the nav needs no icon dependency.
+function BasketIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M3 9h18l-1.6 10.2a2 2 0 0 1-2 1.8H6.6a2 2 0 0 1-2-1.8L3 9Z" />
+      <path d="M8 9 11 3M16 9 13 3" />
+      <path d="M9.5 13.5v4M14.5 13.5v4" />
+    </svg>
+  );
+}
+
 export default function Nav({ lang }: { lang: Lang }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -43,10 +63,22 @@ export default function Nav({ lang }: { lang: Lang }) {
           />
           {t.appName}
         </Link>
-        <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm">
+
+        {/* Cart pinned to the top-right, above the secondary nav row. */}
+        <Link
+          href={`/${lang}/commander`}
+          aria-label={t.cart}
+          className="ms-auto flex items-center gap-2 rounded-lg bg-amber-700/40 px-3 py-2 font-semibold transition hover:bg-amber-700/70 sm:order-none"
+        >
+          <BasketIcon />
+          <span>{t.cart}</span>
+        </Link>
+
+        <nav className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm">
           <Link href={`/${lang}`}>{t.home}</Link>
-          <Link href={`/${lang}/commander`}>{t.cart}</Link>
-          {user ? (
+          {/* Sign-in entry moved to the full-width AuthBanner on the home page;
+              the nav keeps only the signed-in state. */}
+          {user && (
             <>
               <Link href={`/${lang}/compte`}>{t.account}</Link>
               <button
@@ -56,8 +88,6 @@ export default function Nav({ lang }: { lang: Lang }) {
                 {t.logout}
               </button>
             </>
-          ) : (
-            <Link href={`/${lang}/auth`}>{t.login}</Link>
           )}
           <span className="flex items-center gap-1 rounded-full bg-amber-700/40 p-0.5">
             {LANGS.map((l) => (
